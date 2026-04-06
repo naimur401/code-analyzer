@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: codeanalyzer-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: code-analysis
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - codeanalyzer-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: codeanalyzer-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - codeanalyzer-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: codeanalyzer-backend
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/code-analysis
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      OLLAMA_API_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: llama2
+      JWT_SECRET: your_jwt_secret_key_development
+      FRONTEND_URL: http://localhost:3000
+      BACKEND_URL: http://localhost:5000
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - codeanalyzer-network
+    volumes:
+      - ./backend/src:/app/src
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  codeanalyzer-network:
+    driver: bridge
