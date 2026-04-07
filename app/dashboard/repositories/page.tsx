@@ -1,239 +1,280 @@
-'use client'
+﻿'use client';
 
-import { useEffect, useState } from 'react'
-import { useAuthStore } from '@/lib/store/auth'
-import { repositoriesApi } from '@/lib/api'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { GitBranch, Star, GitFork, Plus, Loader2 } from 'lucide-react'
-import Link from 'next/link'
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Star, GitFork, Loader2, RefreshCw, Save, Trash2, CheckCircle, Bookmark } from 'lucide-react';
 
-interface GitHubRepo {
-  name: string
-  fullName: string
-  owner: string
-  url: string
-  description: string
-  language: string
-  stars: number
-  forks: number
+interface Repository {
+  id: number;
+  name: string;
+  full_name: string;
+  description: string;
+  html_url: string;
+  stargazers_count: number;
+  forks_count: number;
+  language: string;
+  updated_at: string;
 }
 
-interface SavedRepo {
-  _id: string
-  name: string
-  fullName: string
-  owner: string
-  language: string
-  stars: number
-  forks: number
-  description: string
+interface SavedRepository {
+  id: number;
+  name: string;
+  fullName: string;
+  description: string;
+  url: string;
+  stars: number;
+  forks: number;
+  language: string;
+  savedAt: string;
 }
 
 export default function RepositoriesPage() {
-  const { token } = useAuthStore()
-  const [githubRepos, setGithubRepos] = useState<GitHubRepo[]>([])
-  const [savedRepos, setSavedRepos] = useState<SavedRepo[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isLoadingGitHub, setIsLoadingGitHub] = useState(false)
-  const [isLoadingSaved, setIsLoadingSaved] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [activeTab, setActiveTab] = useState<'github' | 'saved'>('github')
-
-  const loadGitHubRepos = async () => {
-    if (!token) return
-    setIsLoadingGitHub(true)
-    try {
-      const response = await repositoriesApi.getGitHubRepositories(token)
-      if (response.success && response.data) {
-        setGithubRepos((response.data as any).repositories || [])
-      }
-    } catch (error) {
-      console.error('Error loading GitHub repos:', error)
-    } finally {
-      setIsLoadingGitHub(false)
-    }
-  }
-
-  const loadSavedRepos = async () => {
-    if (!token) return
-    setIsLoadingSaved(true)
-    try {
-      const response = await repositoriesApi.getSavedRepositories(token, 1, 100)
-      if (response.success && response.data) {
-        setSavedRepos(Array.isArray(response.data) ? response.data : (response.data as any).data || [])
-      }
-    } catch (error) {
-      console.error('Error loading saved repos:', error)
-    } finally {
-      setIsLoadingSaved(false)
-    }
-  }
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [savedRepos, setSavedRepos] = useState<SavedRepository[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'github' | 'saved'>('github');
 
   useEffect(() => {
-    if (token) {
-      loadGitHubRepos()
-      loadSavedRepos()
-    }
-  }, [token])
+    fetchRepositories();
+    loadSavedRepos();
+  }, []);
 
-  const handleAddRepository = async (repo: GitHubRepo) => {
-    if (!token) return
-    setIsLoading(true)
+  const fetchRepositories = async () => {
+    setLoading(true);
     try {
-      await repositoriesApi.addRepository(token, {
-        name: repo.name,
-        fullName: repo.fullName,
-        owner: repo.owner,
-        url: repo.url,
-        description: repo.description,
-        language: repo.language,
-        stars: repo.stars,
-        forks: repo.forks,
-      })
-      loadSavedRepos()
+      const token = localStorage.getItem('token');
+      const response = await fetch('https://api.github.com/user/repos?per_page=100', {
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Accept': 'application/json',
+        },
+      });
+      const data = await response.json();
+      setRepositories(data);
     } catch (error) {
-      console.error('Error adding repository:', error)
+      console.error('Error fetching repos:', error);
     } finally {
-      setIsLoading(false)
+      setLoading(false);
     }
+  };
+
+  const loadSavedRepos = () => {
+    const saved = localStorage.getItem('savedRepositories');
+    if (saved) {
+      setSavedRepos(JSON.parse(saved));
+    }
+  };
+
+  const saveRepository = (repo: Repository) => {
+    setSaving(repo.id);
+    
+    const newSaved: SavedRepository = {
+      id: repo.id,
+      name: repo.name,
+      fullName: repo.full_name,
+      description: repo.description || '',
+      url: repo.html_url,
+      stars: repo.stargazers_count,
+      forks: repo.forks_count,
+      language: repo.language || 'Unknown',
+      savedAt: new Date().toISOString(),
+    };
+
+    const existing = savedRepos.find(r => r.id === repo.id);
+    if (!existing) {
+      const updated = [...savedRepos, newSaved];
+      setSavedRepos(updated);
+      localStorage.setItem('savedRepositories', JSON.stringify(updated));
+    }
+    setSaving(null);
+  };
+
+  const removeSavedRepo = (id: number) => {
+    const updated = savedRepos.filter(r => r.id !== id);
+    setSavedRepos(updated);
+    localStorage.setItem('savedRepositories', JSON.stringify(updated));
+  };
+
+  const filteredRepos = repositories.filter(repo =>
+    repo.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredSavedRepos = savedRepos.filter(repo =>
+    repo.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
   }
-
-  const filteredRepos = githubRepos.filter(
-    (repo) =>
-      repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      repo.fullName.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-
-  const githubTabClass = activeTab === 'github'
-    ? 'px-4 py-2 font-medium text-sm text-primary border-b-2 border-primary'
-    : 'px-4 py-2 font-medium text-sm text-muted-foreground hover:text-foreground'
-
-  const savedTabClass = activeTab === 'saved'
-    ? 'px-4 py-2 font-medium text-sm text-primary border-b-2 border-primary'
-    : 'px-4 py-2 font-medium text-sm text-muted-foreground hover:text-foreground'
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Repositories</h1>
-        <p className="text-muted-foreground">Manage and analyze your GitHub repositories</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Repositories</h1>
+          <p className="text-muted-foreground mt-2">
+            GitHub: {repositories.length} repos | Saved: {savedRepos.length} repos
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => setActiveTab('github')} 
+            variant={activeTab === 'github' ? 'default' : 'outline'}
+          >
+            GitHub Repos
+          </Button>
+          <Button 
+            onClick={() => setActiveTab('saved')} 
+            variant={activeTab === 'saved' ? 'default' : 'outline'}
+          >
+            <Bookmark className="h-4 w-4 mr-2" />
+            Saved Repos ({savedRepos.length})
+          </Button>
+          <Button onClick={fetchRepositories} variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
-      <div className="flex gap-4 border-b border-border">
-        <button onClick={() => setActiveTab('github')} className={githubTabClass}>
-          GitHub Repositories
-        </button>
-        <button onClick={() => setActiveTab('saved')} className={savedTabClass}>
-          Saved Repositories ({savedRepos.length})
-        </button>
-      </div>
+      <Input
+        placeholder="Search repositories..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="max-w-md"
+      />
 
       {activeTab === 'github' && (
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Search repositories..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1"
-            />
-            <Button onClick={loadGitHubRepos} disabled={isLoadingGitHub}>
-              {isLoadingGitHub && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Refresh
-            </Button>
-          </div>
-
-          {isLoadingGitHub ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin inline-block mr-2" />
-              Loading repositories...
-            </div>
-          ) : filteredRepos.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <p className="text-muted-foreground">No repositories found</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {filteredRepos.map((repo) => (
-                <Link href={'/dashboard/' + repo.name} key={repo.fullName} className="block">
-                  <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                    <CardContent className="py-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            <GitBranch className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <h3 className="font-semibold truncate">{repo.name}</h3>
-                          </div>
-                          <p className="text-sm text-muted-foreground truncate">{repo.owner}/{repo.name}</p>
-                          {repo.description && (
-                            <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{repo.description}</p>
-                          )}
-                          <div className="flex gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
-                            {repo.language && <span className="bg-muted rounded px-2 py-1">{repo.language}</span>}
-                            <span className="flex items-center gap-1"><Star className="h-3 w-3" />{repo.stars}</span>
-                            <span className="flex items-center gap-1"><GitFork className="h-3 w-3" />{repo.forks}</span>
-                          </div>
-                        </div>
-                        <Button
-                          onClick={(e) => { e.preventDefault(); handleAddRepository(repo) }}
-                          disabled={isLoading}
-                          size="sm"
-                          className="flex-shrink-0"
-                        >
-                          {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                          <Plus className="h-4 w-4 mr-1" />
-                          Add
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          )}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredRepos.map((repo) => {
+            const isSaved = savedRepos.some(r => r.id === repo.id);
+            return (
+              <Card key={repo.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    <a href={repo.html_url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                      {repo.name}
+                    </a>
+                  </CardTitle>
+                  <CardDescription>
+                    {repo.description || 'No description'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex justify-between items-center">
+                    <div className="flex gap-4 text-sm text-muted-foreground">
+                      {repo.language && (
+                        <span className="flex items-center gap-1">
+                          <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                          {repo.language}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <Star className="h-4 w-4" />
+                        {repo.stargazers_count}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <GitFork className="h-4 w-4" />
+                        {repo.forks_count}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={isSaved ? "secondary" : "default"}
+                      onClick={() => saveRepository(repo)}
+                      disabled={isSaved || saving === repo.id}
+                    >
+                      {saving === repo.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : isSaved ? (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Saved
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-1" />
+                          Save
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
       {activeTab === 'saved' && (
-        <div className="space-y-4">
-          {isLoadingSaved ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin inline-block mr-2" />
-              Loading saved repositories...
-            </div>
-          ) : savedRepos.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <p className="text-muted-foreground">No saved repositories yet. Add some from GitHub Repositories tab.</p>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredSavedRepos.map((repo) => (
+            <Card key={repo.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  <a href={repo.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                    {repo.name}
+                  </a>
+                </CardTitle>
+                <CardDescription>
+                  {repo.description || 'No description'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-between items-center">
+                  <div className="flex gap-4 text-sm text-muted-foreground">
+                    {repo.language && (
+                      <span className="flex items-center gap-1">
+                        <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                        {repo.language}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <Star className="h-4 w-4" />
+                      {repo.stars}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <GitFork className="h-4 w-4" />
+                      {repo.forks}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => removeSavedRepo(repo.id)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Remove
+                  </Button>
+                </div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Saved: {new Date(repo.savedAt).toLocaleDateString()}
+                </div>
               </CardContent>
             </Card>
-          ) : (
-            <div className="space-y-3">
-              {savedRepos.map((repo) => (
-                <Card key={repo._id} className="hover:shadow-lg transition-shadow">
-                  <CardContent className="py-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <GitBranch className="h-4 w-4 text-muted-foreground" />
-                      <h3 className="font-semibold">{repo.name}</h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{repo.owner}/{repo.name}</p>
-                    {repo.description && <p className="text-sm text-muted-foreground mt-1">{repo.description}</p>}
-                    <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
-                      {repo.language && <span className="bg-muted rounded px-2 py-1">{repo.language}</span>}
-                      <span className="flex items-center gap-1"><Star className="h-3 w-3" />{repo.stars}</span>
-                      <span className="flex items-center gap-1"><GitFork className="h-3 w-3" />{repo.forks}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'github' && filteredRepos.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          No repositories found
+        </div>
+      )}
+
+      {activeTab === 'saved' && filteredSavedRepos.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          No saved repositories. Go to GitHub Repos tab and save some!
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -2,8 +2,8 @@
   "name": "codeanalyzer-backend",
   "version": "1.0.0",
   "description": "Express backend for GitHub code analysis platform",
-  "type": "module", "main": "dist/index.js",
   "type": "module",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
@@ -37,6 +37,6 @@
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "eslint": "^8.54.0",
-    "tsx": "^4.7.0"
+    "tsx": "^4.21.0"
   }
 }
